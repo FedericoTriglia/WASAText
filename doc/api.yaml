@@ -1,0 +1,1343 @@
+openapi: 3.0.0
+info:
+  title: WASAText - OpenAPI 3.0
+  description: |-
+    This is the OpenAPI specification for the WASAText web-app.
+  version: 1.0.0
+servers:
+  - url: http://localhost:3000
+tags:
+  - name: login
+    description: |-
+        Login related operations.
+  - name: conversations
+    description: |-
+        Operations related to either all the exising conversations or a specific conversation.
+  - name: messages
+    description: |-
+        Operations related to either all the messages of a specific conversation or a specific message of a specific conversation.
+  - name: reactions
+    description: |-
+        Operatios related to the reaction of a user to a specific message.
+  - name: user
+    description: |-
+        Operations related to a specific user's profile.
+  - name: groups
+    description: |-
+        Operations related to a specific group.
+  - name: users
+    description: |-
+        Operations related to all the users.
+paths:
+  /session:
+    post:
+      tags: ["login"]
+      summary: Logs in the user
+      description: |-
+        If the user does not exist, it will be created,
+        and an identifier is returned.
+        If the user exists, the user identifier is returned.
+      operationId: doLogin
+      security: []
+      requestBody:
+        description: |-
+            User details
+        content:
+          application/json:
+            schema:
+              description: |-
+                  This schema represents the requestBody of the "doLogin" operation.
+              type: object
+              properties:
+                name:
+                  description: |-
+                      This propery represents the username of the user who wants to log in.
+                  type: string
+                  example: Maria
+                  pattern: '^[A-Za-z0-9]{3,16}$'
+                  minLength: 3
+                  maxLength: 16
+        required: true
+      responses:
+        "201":
+          description: |-
+              User log-in action successful
+          content:
+            application/json:
+              schema:
+                description: |-
+                    This schema represents the 201 response to the doLogin operation.
+                type: object
+                properties:
+                  identifier:
+                    description: |-
+                        The user identifier.
+                    # change here if you decide to use an integer
+                    # or any other type of identifier
+                    type: string
+                    example: "abcdef012345"
+        "400":
+          description: |-
+              Invalid username
+  /conversations:
+    get:
+      tags: ["conversations"]
+      operationId: getMyConversations
+      summary: Returns the conversations of the user
+      description: |-
+        Returns the lists of all the conversations of the user
+      responses:
+        "200":
+          description: |-
+            It is an array of integers
+            containing the user's conversations' id
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Conversations"
+        "401":
+          description: |-
+            Unauthorized: missing or invalid bearer token
+    post:
+      tags: ["conversations"]
+      operationId: createConversation
+      summary: Create a new private conversation
+      description: |-
+        Creates a new private (one-to-one) conversation with the specified user
+        and sends the first message at the same time.
+        If a private conversation between the two users already exists, returns 409.
+        The authenticated user is identified by the Bearer token.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              description: |-
+                  Request body for createConversation.
+              type: object
+              required:
+                - targetUsername
+                - content
+              properties:
+                targetUsername:
+                  type: string
+                  example: "Luigi"
+                  minLength: 3
+                  maxLength: 16
+                  pattern: '^[A-Za-z0-9]{3,16}$'
+                  description: |-
+                      Username of the user to start a conversation with.
+                content:
+                  type: string
+                  example: "Ciao"
+                  pattern: '^.*?$'
+                  minLength: 1
+                  maxLength: 100000
+                  description: |-
+                      Text content of the first message.
+      responses:
+        "201":
+          description: Conversation created successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Conversation"
+        "400":
+          description: Bad request - Invalid username or message format
+        "401":
+          description: Unauthorized
+        "404":
+          description: Target user not found
+          content:
+            application/json:
+              schema:
+                description: |-
+                  This schema contains the 404 error related message
+                type: object
+                properties:
+                  error:
+                    description: |-
+                      The 404 error related message (user not found)
+                    type: string
+                    example: "User 'Luigi' not found"
+        "409":
+          description: Conflict - A private conversation with this user already exists
+          content:
+            application/json:
+              schema:
+                description: |-
+                  This schema contains the 409 error related message
+                type: object
+                properties:
+                  error:
+                    description: |-
+                      The 409 error related message
+                    type: string
+                    example: "A conversation with 'Luigi' already exists"
+  /conversations/{conversationId}:
+    get:
+      tags: ["conversations"]
+      operationId: getConversation
+      summary: Returns the specified conversation
+      description: |-
+        Returns the specified conversation among all the user's ones
+      parameters:
+        - name: conversationId
+          in: path
+          description: The id of the conversation
+          schema:
+            type: integer
+          required: true
+      responses:
+        "200":
+          description: Conversation returned successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Conversation"
+        "401":
+          description: Unauthorized
+        "403":
+          description: Forbidden - Not a participant in this conversation
+        "404":
+          description: Conversation not found
+  /conversations/{conversationId}/messages:
+    parameters:
+      - name: conversationId
+        in: path
+        description: |-
+            The id of the conversation
+        schema:
+          type: integer
+        required: true
+    post:
+      tags: ["messages"]
+      operationId: sendMessage
+      summary: The user sends a message
+      description: |-
+        A new message is created in the specified conversation.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MessageText"
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/MessageImage"
+        required: true
+      responses:
+        "201":
+          description: |-
+              Message sent successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageCreated"
+        "400":
+          description: |-
+              Bad request - Invalid message content
+        "401":
+          description: |-
+              Unauthorized
+        "403":
+          description: |-
+              Forbidden - Not a participant in this conversation
+        "404":
+          description: Conversation not found
+  /conversations/{conversationId}/read:
+    parameters:
+      - name: conversationId
+        in: path
+        description: The id of the conversation
+        schema:
+          type: integer
+        required: true
+    put:
+      tags: ["messages"]
+      operationId: markMessagesRead
+      summary: Mark all messages in a conversation as read
+      description: |-
+        Marks all unread messages in the specified conversation as read
+        for the authenticated user.
+        Should be called when the user opens a conversation.
+        The user is identified by the Bearer token.
+      responses:
+        "204":
+          description: Messages marked as read successfully (no content)
+        "401":
+          description: Unauthorized
+        "403":
+          description: Forbidden - Not a participant in this conversation
+        "404":
+          description: Conversation not found
+  /conversations/{conversationId}/messages/{messageId}:
+    parameters:
+      - name: conversationId
+        in: path
+        description: |-
+            The id of the conversation
+        schema:
+          type: integer
+        required: true
+      - name: messageId
+        in: path
+        description: |-
+            The id of the message
+        schema:
+          type: integer
+        required: true
+    delete:
+      tags: ["messages"]
+      operationId: deleteMessage
+      summary: The user deletes a previously sent message.
+      description: |-
+          The user deletes the specified message of the specified conversation.
+      responses:
+        "204":
+          description: Message deleted successfully
+        "401":
+          description: Unauthorized
+        "403":
+          description: Forbidden - Cannot delete messages from other users
+        "404":
+          description: Message not found
+  /conversations/{conversationId}/messages/{messageId}/reactions:
+    parameters:
+      - name: conversationId
+        in: path
+        description: |-
+            The id of the conversation
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+          example: 42
+      - name: messageId
+        in: path
+        description: The id of the message to react to
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+          example: 18284
+    put:
+      tags: ["reactions"]
+      operationId: commentMessage
+      summary: Add or update reaction to a message (comment)
+      description: |-
+        Adds or updates a reaction (emoticon) to the specified message.
+        Each user can have only ONE reaction per message.
+        If the user already has a reaction on this message, it will be replaced,
+        otherwise a new reaction is created.
+        The user is identified by the Bearer token.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReactionEmoticon"
+      responses:
+        "200":
+          description: |-
+              Reaction added or updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReactionCreated"
+        "400":
+          description: |-
+              Bad request - Invalid emoticon
+        "401":
+          description: |-
+              Unauthorized
+        "403":
+          description: |-
+              Forbidden - Not a participant in this conversation
+        "404":
+          description: Message not found
+    delete:
+      tags: ["reactions"]
+      operationId: uncommentMessage
+      summary: Remove reaction from message (uncomment)
+      description: |-
+        Removes the user's reaction (emoticon) from the specified message.
+        The user is identified by the Bearer token.
+      responses:
+        "204":
+          description: Reaction removed successfully
+        "400":
+          description: Bad request - Invalid message or conversation ID
+        "401":
+          description: Unauthorized
+        "404":
+          description: Message or reaction not found
+  /conversations/{conversationId}/messages/{messageId}/forward:
+    post:
+      tags: ["messages"]
+      operationId: forwardMessage
+      summary: Forward a message to another conversation
+      description: |-
+        Forwards the specified message to another conversation.
+        The message content (text or photo) is copied to the target conversation.
+        The user must be a participant in both the source and target conversations.
+        The user is identified by the Bearer token.
+      parameters:
+        - name: conversationId
+          in: path
+          description: The id of the source conversation
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+        - name: messageId
+          in: path
+          description: |-
+            The id of the message to forward
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConversationId"
+      responses:
+        "201":
+          description: Message forwarded successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageForwarded"
+        "400":
+          description: Bad request - Invalid conversation or message ID
+        "401":
+          description: Unauthorized
+        "403":
+          description: Forbidden - Not a participant in source or target conversation
+        "404":
+          description: Source message, source conversation, or target conversation not found
+  #USER PROFILE
+  /users:
+    get:
+      tags: ["users"]
+      operationId: searchUsers
+      summary: Search for users by username
+      description: |
+        Returns a list of users whose username matches the search query.
+        Used to find users to start conversations with.
+      parameters:
+        - name: randomUser
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 3
+            maxLength: 100
+            example: "randomUser"
+            pattern:  '^[A-Za-z0-9]{3,100}$'
+          description: |-
+              Search query (partial username match)
+      responses:
+        "200":
+          description: List of matching users
+          content:
+            application/json:
+              schema:
+                description: |-
+                    Schema of the 200 response to the "searchUsers" operation.
+                type: array
+                minItems: 0
+                maxItems: 1000000000
+                items:
+                  description: |-
+                      Each item of the array represents a user/outcome of the search
+                  type: object
+                  properties:
+                    username:
+                      description: |-
+                          The username of a single object of the array.
+                      type: string
+                      example: "Maria"
+                    photoUrl:
+                      description: |-
+                          The photoUrl of a single object of the array
+                      type: string
+                      format: url
+                      example: "https://example.com/photos/user123.jpg"
+        "401":
+          description: Unauthorized
+  /users/me/photo:
+    put:
+      tags: ["user"]
+      operationId: setMyPhoto
+      summary: Update my profile photo
+      description: |-
+        Updates the authenticated user's profile photo.
+        The user is identified by the Bearer token.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/UserPhoto"
+      responses:
+        "200":
+          description: Photo updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserPhotoUpdated"
+        "400":
+          description: Bad request - Invalid file format or size
+          content:
+            application/json:
+              schema:
+                description: |-
+                    The 400 response to the "setMyPhoto" operation.
+                type: object
+                properties:
+                  error:
+                    description: |-
+                        A string describing the error.
+                    type: string
+                    example: "Invalid image format. Supported: JPEG, PNG"
+        "401":
+          description: Unauthorized
+        "413":
+          description: Payload too large - Photo file too big
+          content:
+            application/json:
+              schema:
+                description: |-
+                    The 413 schema of the response to the "setMyPhoto" operation.
+                type: object
+                properties:
+                  error:
+                    description: |-
+                        A string describing the error.
+                    type: string
+                    example: "File size exceeds maximum allowed (5MB)"
+  #GROUP MANAGEMENT
+  /groups:
+    post:
+      tags: ["groups"]
+      operationId: createGroup
+      summary: Create a new group
+      description: |
+        Creates a new group conversation with the specified members.
+        The authenticated user becomes automatically a member and can invite others.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              description: |-
+                  This schema represents the request body of the "createGroup" operation.
+              type: object
+              required:
+                - name
+                - memberUsernames
+              properties:
+                name:
+                  type: string
+                  example: "WASA"
+                  minLength: 1
+                  maxLength: 50
+                  description: Group name
+                  pattern:  '^[A-Za-z0-9]{3,100}$'
+                memberUsernames:
+                  type: array
+                  minItems: 1
+                  maxItems: 10000000
+                  items:
+                    type: string
+                    minLength: 3
+                    maxLength: 16
+                    pattern:  '^[A-Za-z0-9]{3,100}$'
+                  example: ["Luigi", "Marco", "Anna"]
+                  description: Usernames of users to add to the group
+      responses:
+        "201":
+          description: Group created successfully
+          content:
+            application/json:
+              schema:
+                description: |-
+                    This schema represents the 201 response to the "createGroup" operation.
+                type: object
+                properties:
+                  groupId:
+                    description: |-
+                        The id of the group created.
+                    type: integer
+                    example: 42
+                  name:
+                    description: |-
+                        The name of the group.
+                    type: string
+                    example: "Gruppo Università"
+                  members:
+                    description: |-
+                        The number of members of the group.
+                    type: array
+                    minItems: 1
+                    maxItems: 10000000
+                    items:
+                      description: |-
+                          Each item represents a username/member of the group
+                      type: string
+                    example: ["Maria", "Luigi", "Marco", "Anna"]
+                  createdAt:
+                    description: |-
+                        Timestamp of the creation of the group.
+                    type: string
+                    format: date-time
+        "400":
+          description: Bad request - Invalid group data
+        "401":
+          description: Unauthorized
+        "404":
+          description: One or more users not found
+  /groups/{groupId}/name:
+    put:
+      tags: ["groups"]
+      operationId: setGroupName
+      summary: Update group name
+      description: |-
+        Updates the name of the specified group.
+        Only group members can update the group name.
+        The user is identified by the Bearer token.
+      parameters:
+        - name: groupId
+          in: path
+          description: The id of the group
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+            example: 42
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GroupName"
+      responses:
+        "200":
+          description: Group name updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GroupNameUpdated"
+        "400":
+          description: Bad request - Invalid group name
+        "401":
+          description: Unauthorized
+        "403":
+          description: Forbidden - Not a member of this group
+          content:
+            application/json:
+              schema:
+                description: |-
+                    This schema represents the 403 response of the "setGroupName" operation.
+                type: object
+                properties:
+                  error:
+                    description: |-
+                        This property represents a string describing the error.
+                    type: string
+                    example: "You must be a group member to change the name"
+        "404":
+          description: Group not found
+  
+  /groups/{groupId}/photo:
+    put:
+      tags: ["groups"]
+      operationId: setGroupPhoto
+      summary: Update group photo
+      description: |-
+        Updates the photo of the specified group.
+        Only group members can update the group photo.
+        The user is identified by the Bearer token.
+      parameters:
+        - name: groupId
+          in: path
+          description: The id of the group
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+            example: 42
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/GroupPhoto"
+      responses:
+        "200":
+          description: Group photo updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GroupPhotoUpdated"
+        "400":
+          description: Bad request - Invalid file format or size
+          content:
+            application/json:
+              schema:
+                description: |-
+                    This schema represents the 400 error of the "setGroupPhoto" operation.
+                type: object
+                properties:
+                  error:
+                    description: |-
+                        A string describing the error.
+                    type: string
+                    example: "Invalid image format. Supported: JPEG, PNG"
+        "401":
+          description: Unauthorized
+        "403":
+          description: Forbidden - Not a member of this group
+          content:
+            application/json:
+              schema:
+                description: |-
+                    This schema represents the 403 error of the "setGroupPhoto" operation.
+                type: object
+                properties:
+                  error:
+                    description: |-
+                        A string describing the error.
+                    type: string
+                    example: "You must be a group member to change the photo"
+        "404":
+          description: Group not found
+        "413":
+          description: Payload too large - Photo file too big
+          content:
+            application/json:
+              schema:
+                description: |-
+                    This schema represents the 413 error of the "setGroupPhoto" operation.
+                type: object
+                properties:
+                  error:
+                    description: |-
+                        A string describing the error.
+                    type: string
+                    example: "File size exceeds maximum allowed (5MB)"
+  /groups/{groupId}/members:
+    post:
+      tags: ["groups"]
+      operationId: addToGroup
+      summary: Add a user to the group
+      description: |-
+        Adds a new member to the specified group.
+        Only existing group members can add other users.
+        The user making the request is identified by the Bearer token.
+      parameters:
+        - name: groupId
+          in: path
+          description: The id of the group
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+            example: 42
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Username"
+      responses:
+        "201":
+          description: User added to group successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UsernameAddedToGroup"
+        "400":
+          description: Bad request - Invalid username
+          content:
+            application/json:
+              schema:
+                description: |-
+                    The schema representing the 400 error of the "addToGroup" method.
+                type: object
+                properties:
+                  error:
+                    description: |-
+                        A string representing the error.
+                    type: string
+                    example: "Invalid username format"
+        "401":
+          description: Unauthorized
+        "403":
+          description: Forbidden - Not a member of this group
+          content:
+            application/json:
+              schema:
+                description: |-
+                    The schema representing the 403 error of the "addToGroup" method.
+                type: object
+                properties:
+                  error:
+                    description: |-
+                        A string representing the error.
+                    type: string
+                    example: "Only group members can add other users"
+        "404":
+          description: Group or user not found
+          content:
+            application/json:
+              schema:
+                description: |-
+                    The schema representing the 404 error of the "addToGroup method".
+                type: object
+                properties:
+                  error:
+                    description: |-
+                        A string representing the error.
+                    type: string
+                    example: "User 'Luigi' not found"
+        "409":
+          description: Conflict - User is already a member
+          content:
+            application/json:
+              schema:
+                description: |-
+                    The error 409 of the "addToGroup" method.
+                type: object
+                properties:
+                  error:
+                    description: |-
+                        A string representing the error.
+                    type: string
+                    example: "User 'Luigi' is already a member of this group"
+  /groups/{groupId}/members/me:
+    delete:
+      tags: ["groups"]
+      operationId: leaveGroup
+      summary: Leave a group
+      description: |-
+        Removes the authenticated user from the specified group.
+        The user is identified by the Bearer token.
+        Users can leave groups at any time.
+      parameters:
+        - name: groupId
+          in: path
+          description: The id of the group to leave
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+            example: 42
+      responses:
+        "204":
+          description: Successfully left the group (no content)
+        "401":
+          description: Unauthorized
+        "404":
+          description: Group not found or user is not a member
+          content:
+            application/json:
+              schema:
+                description: |-
+                    This schema represents an error related to the 404 response of the "leaveGroup" operationId.
+                type: object
+                properties:
+                  error:
+                    description: |-
+                        The string describing the error.
+                    type: string
+                    example: "Group not found or you are not a member"
+#COMPONENTS
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: |-
+        User identifier returned from login.
+        Use the identifier as the bearer token.
+  schemas:
+    Conversations:
+      description: |-
+          This schema represents a list of conversations
+      type: array
+      minItems: 0
+      maxItems: 100000
+      items:
+        type: object
+        properties:
+          id:
+            type: integer
+            minimum: 1
+            example: 42
+            description: |-
+                Conversation identifier
+          type:
+            type: string
+            enum: [direct, group]
+            example: direct
+            description: |-
+                Type of conversation (direct chat or group)
+          name:
+            type: string
+            example: "Marco"
+            description: |-
+                Username (for direct) or group name (for group).
+          photoUrl:
+            type: string
+            format: uri
+            example: "https://example.com/photos/user123.jpg"
+            description: |-
+                Profile photo URL (user or group)
+          lastMessage:
+            type: object
+            description: |-
+                Preview of the last message
+            properties:
+              preview:
+                type: string
+                example: "Ciao, come stai?"
+                maxLength: 100
+                description: |-
+                    Text snippet (photo url if photo message)
+              timestamp:
+                type: string
+                format: date-time
+                example: "2025-12-13T17:37:43Z"
+                description: |-
+                    Timestamp of last message
+              isPhoto:
+                type: boolean
+                example: false
+                description: |-
+                    True if last message is a photo
+          unreadCount:
+            type: integer
+            minimum: 0
+            example: 3
+            description: |-
+                Number of unread messages in this conversation
+    Conversation:
+      description: |-
+          This schema represents a conversation.
+      type: object 
+      properties:
+        id:
+          type: integer
+          minimum: 1
+          description: |-
+              The conversation identifier
+        type:
+          type: string
+          enum: [direct, group]
+          example: direct
+          description: |-
+              Type of conversation
+        name:
+          type: string
+          example: "Marco"
+          description: |-
+              Username or group name
+        photoUrl:
+          type: string
+          format: uri
+          example: "https://example.com/photos/user123.jpg"
+          description: |-
+              Profile photo URL
+        participants:
+          type: array
+          description: |-
+              List of participant usernames (for groups)
+          minItems: 1
+          maxItems: 10000000
+          items:
+            description: |-
+                Each item of the array represents a single partecipant of the conversation.
+            type: string
+            example: "Maria"
+        messages:
+          type: array
+          description: |-
+              All messages in reverse chronological order
+          minItems: 0
+          maxItems: 100000000
+          items:
+            type: object
+            properties:
+              id:
+                description: |-
+                    The id of the message
+                type: integer
+                minimum: 1
+                example: 18284
+              senderId:
+                type: string
+                example: "user123"
+                description: |-
+                    ID of the message sender
+              senderUsername:
+                type: string
+                example: "Maria"
+                description: |-
+                    Username of sender
+              content:
+                type: string
+                example: "Ciao, come stai?"
+                description: |-
+                    Text content (empty if photo message)
+              photoUrl:
+                type: string
+                format: uri
+                example: "https://example.com/photos/msg123.jpg"
+                description: |-
+                    Photo URL (present only for photo messages)
+              timestamp:
+                description: |-
+                    The timesatmp of the message.
+                type: string
+                format: date-time
+                example: "2025-12-13T17:37:43Z"
+              status:
+                type: string
+                enum: [sent, received, read]
+                example: "received"
+                description: |-
+                  Message status (checkmarks - for sent messages):
+                    - sent: message sent (no checkmark)
+                    - received: one checkmark (delivered to all recipients)
+                    - read: two checkmarks (opened by all recipients)
+              replyTo:
+                type: object
+                description: |-
+                    Present only if this message is a reply
+                properties:
+                  messageId:
+                    description: |-
+                        The id of the message to be replied to.
+                    type: integer
+                    example: 18200
+                  content:
+                    description: |-
+                        The content of the message to be replied to.
+                    type: string
+                    example: "Ci sei?"
+                  senderUsername:
+                    description: |-
+                        The username of user who sent the message to be replied to
+                    type: string
+                    example: "Luigi"
+              reactions:
+                type: array
+                description: |-
+                    Comments/reactions on this message
+                minItems: 0
+                maxItems: 100000
+                items:
+                  type: object
+                  properties:
+                    username:
+                      description: |-
+                          The username of the user who reacted.
+                      type: string
+                      example: "Marco"
+                    emoticon:
+                      type: string
+                      example: "👍"
+                      description: |-
+                          Reaction emoticon
+                    timestamp:
+                      description: |-
+                          The timestamp of the reaction.
+                      type: string
+                      format: date-time
+                      example: "2025-12-13T17:38:00Z"
+              isForwarded:
+                type: boolean
+                example: false
+                description: |-
+                    True if this message was forwarded from another conversation
+    MessageText:
+      description: |-
+          This schema represents the text of a message, if it is a string.
+      type: object 
+      properties:
+        content:
+          description: |-
+              The content of the message
+          type: string
+          example: "Ciao, come stai?"
+          minLength: 1
+          maxLength: 100000
+          pattern: '^(.|[\r\n]){1,100000}$'
+        replyToMessageId:
+          description: |-
+              The id of the message to which the message is a response (optional).
+          type: integer
+          format: int64
+          minimum: 1
+          example: 18284
+      required: [content]
+    MessageImage:
+      description: |-
+          This schema represents the image of a message.
+      type: object
+      properties:
+        photo:
+          description: |-
+              This property represents the photo of a message.
+          type: string
+          format: binary
+          minLength: 1
+          maxLength: 100000000
+      required: [photo]
+    MessageCreated:
+      description: |-
+          This schema represents a message just created.
+      type: object 
+      properties:
+        id:
+          description: |-
+              The id of the message.
+          type: integer
+          minimum: 1
+          example: 18284
+        checkmarks:
+          description: |-
+              The checkmarks of the message.
+          type: integer
+          maximum: 2
+          example: 0
+        timestamp:
+          description: |-
+              The timestamp of the message (when it has been sent).
+          type: string
+          format: date-time
+        content:
+          description: |-
+              The content of the message (if it is a string).
+          type: string
+          example: "Ciao, come stai?"
+        photoUrl:
+          description: |-
+              The content of the message (if it is a pic).
+          type: string
+          format: url
+    ReactionEmoticon:
+      description: |-
+          This schema represents the emoticon of a reaction.
+      type: object
+      required:
+        - emoticon
+      properties:
+        emoticon:
+          type: string
+          pattern:  '^.*$'
+          example:  "😄"
+          minLength: 1
+          maxLength: 10
+          description: |-
+              Emoticon to use as reaction (emoji or text)
+    ReactionCreated:
+      description: |-
+          A reaction just created.
+      type: object
+      properties:
+        username:
+          description: |-
+              The username of the user who sent a reaction.
+          type: string
+          example: "Maria"
+        emoticon:
+          description: |-
+              The emoticon of the reaction.
+          type: string
+          example: "😄"
+        messageId:
+          description: |-
+              The id of the message of the reaction.
+          type: integer
+          example: 18284
+    MessageForwarded:
+      description: |-
+          This schema represents a message forwarded from a conversation to another.
+      type: object
+      properties:
+        id:
+          description: |-
+              The id of the message.
+          type: integer
+          minimum: 1
+          example: 18999
+        checkmarks:
+          description: |-
+              The checkmarks of the message (1 if every user of the conversation received it, 2 if every user of the conversation read it, 0 if at least a user did not receive it).
+          type: integer
+          minimum: 0
+          maximum: 2
+          example: 0
+        timestamp:
+          description: |-
+              The timestamp of the message
+          type: string
+          format: date-time
+        content:
+          description: |-
+              The content of the message, if it is a string.
+          type: string
+          example: "Ciao, come stai?"
+        photoUrl:
+          type: string
+          format: url
+          description: |-
+              Present only if message contains a photo
+        targetConversationId:
+          description: |-
+              The id of the conversation to which the message belongs.
+          type: integer
+          example: 99
+    ConversationId:
+      description: |-
+          This schema represents the id of a particular conversation(not group, so it is supposed to be a conversation between 2 users only)
+      type: object
+      required:
+        - targetConversationId
+      properties:
+        targetConversationId:
+          type: integer
+          minimum: 1
+          example: 99
+          description: |-
+            The id of the conversation to which the message is dirrected.
+    Username:
+      description: |-
+          This schema represents a username that has to be created(it is supposed to be used for client's requests).
+      type: object
+      required:
+        - username
+      properties:
+        username:
+          type: string
+          example: "NewMaria"
+          minLength: 3
+          maxLength: 16
+          pattern: '^[A-Za-z0-9]{3,16}$'
+          description: |-
+              New username (must be unique)
+    UserPhoto:
+      description: |-
+          This schema represents the photo of a user. Hence it is characterized by a single propery: the photo itself.
+      type: object
+      required:
+        - photo
+      properties:
+        photo:
+          type: string
+          format: binary
+          description: |-
+              Profile photo file (JPEG, PNG, etc.)
+          minLength: 1
+          maxLength: 100000000
+    UserPhotoUpdated:
+      description: |-
+          This schema represents the photo of a user's profile. Hence it is characterized by a unique propery: the photoUrl itself.
+      type: object
+      properties:
+        photoUrl:
+          description: |-
+              The url of the photo.
+          type: string
+          format: url
+          example: "https://example.com/photos/user123.jpg"
+    GroupName:
+      description: |-
+          This schema represents the name of a group. Hence it is characterized by a single property (the name itself).
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          example: "Gruppo Università 2025"
+          minLength: 3
+          maxLength: 50
+          description: |-
+              New group name
+          pattern: "^[A-Za-z0-9 àèìòù]{3,50}$"
+    GroupNameUpdated:
+      description: |-
+          This schema represents the new name of a particular group. Hence it is characterized by 2 properties: the group Id and the new name of the group.
+      type: object
+      properties:
+        groupId:
+          description: |-
+              The id of the group.
+          type: integer
+          example: 42
+        name:
+          description: |-
+              The new name of the group.
+          type: string
+          minLength: 1
+          maxLength: 50
+          example: "Gruppo Università 2025"
+    GroupPhoto:
+      description: |-
+          This schema represents the photo of a group. Hence it is characterized by a single property(the photo itself).
+      type: object
+      required:
+        - photo
+      properties:
+        photo:
+          type: string
+          format: binary
+          minLength: 1
+          maxLength: 100000000
+          description: |-
+              Group photo file (JPEG, PNG, etc.)
+    GroupPhotoUpdated:
+      description: |-
+          This schema represents the new picture of a particular group(Photo Updated). Hence, it is characterized by the group Id (the id of the group whose pic has been modified), and the new pic (photoUrl).
+      type: object
+      properties:
+        groupId:
+          description: |-
+              The id of the group.
+          type: integer
+          example: 42
+        photoUrl:
+          description: |-
+              URL of the uploaded photo
+          type: string
+          format: url
+          example: "https://example.com/photos/group42.jpg"
+    UsernameAddedToGroup:
+      description: |-
+          This schema represents a user added to a group. Hence it is characterized by 3 properties: groupId, username, addedAt(timestamp).
+      type: object
+      properties:
+        groupId:
+          description: |-
+              The id of the group.
+          type: integer
+          example: 42
+        username:
+          description: |-
+              The username of the user added to the group.
+          type: string
+          example: "Luigi"
+        addedAt:
+          description: |-
+              The timestamp of the operation.
+          type: string
+          format: date-time
+          example: "2025-12-13T18:00:00Z"
+security:
+  - bearerAuth: []

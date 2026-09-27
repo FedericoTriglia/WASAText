@@ -1,0 +1,17 @@
+# Stage 1: build the Go backend with embedded frontend
+FROM golang:1.21 AS backend-builder
+
+WORKDIR /src
+COPY . .
+
+RUN go build -o /app/webapi ./cmd/webapi
+
+# Stage 2: minimal final image
+FROM debian:bookworm-slim
+
+WORKDIR /app
+RUN mkdir -p /tmp/photos
+COPY --from=backend-builder /app/webapi ./
+
+EXPOSE 3000
+CMD ["/app/webapi"]
